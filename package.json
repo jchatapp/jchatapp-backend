@@ -3,6 +3,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "instagram-private-api": "^1.46.1",
-    "node": "^18.20.2"
+    "node": "^18.20.2",
+    "utils": "^0.3.1"
   }
 }
