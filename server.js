@@ -22,7 +22,16 @@ app.post('/login', async (req, res) => {
     await igClient.simulate.preLoginFlow(); 
     const userData = await igClient.account.login(username, password); 
     const chatList = await igClient.feed.directInbox().items();
-    console.log(chatList)
+    //const threadF = igClient.feed.directThread("340282366841710301244259478305561480978");
+    //threadF.cursor = undefined;
+    //threadF.id = "340282366841710301244259478305561480978";
+    //console.log(threadF)
+    //threadF.request().then((response) => {
+    //  console.log(response.thread);  
+   //   return response.thread;      
+    //}).catch((error) => {
+    //  console.error("Error:", error); 
+    //});
     res.json({
       userData, 
       chatList, 
@@ -37,6 +46,7 @@ app.get('/chats', async (req, res) => {
   try {
     const chatList = await igClient.feed.directInbox().items();
     res.json(chatList); 
+    console.log(chatList)
   } catch (error) {
     console.error('Failed to fetch chat list:', error); 
     res.status(500).json({ error: 'Failed to retrieve chat list' });
@@ -57,6 +67,8 @@ app.get('/chats/:chatId', async (req, res) => {
   }
 });
 
+
+
 app.get('/chats/:chatId/older', async (req, res) => {
   const { chatId } = req.params;
 
@@ -69,6 +81,8 @@ app.get('/chats/:chatId/older', async (req, res) => {
     console.error('Failed to fetch older messages:', error); 
     res.status(500).json({ error: 'Failed to retrieve older messages' }); 
 }});
+
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
