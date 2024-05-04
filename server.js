@@ -22,16 +22,6 @@ app.post('/login', async (req, res) => {
     await igClient.simulate.preLoginFlow(); 
     const userData = await igClient.account.login(username, password); 
     const chatList = await igClient.feed.directInbox().items();
-    //const threadF = igClient.feed.directThread("340282366841710301244259478305561480978");
-    //threadF.cursor = undefined;
-    //threadF.id = "340282366841710301244259478305561480978";
-    //console.log(threadF)
-    //threadF.request().then((response) => {
-    //  console.log(response.thread);  
-   //   return response.thread;      
-    //}).catch((error) => {
-    //  console.error("Error:", error); 
-    //});
     res.json({
       userData, 
       chatList, 
@@ -42,47 +32,24 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.get('/chats', async (req, res) => {
+app.get('/chats/:thread_id', async (req, res) => {
+  const { thread_id } = req.params; 
+  const thread = igClient.entity.directThread();
   try {
-    const chatList = await igClient.feed.directInbox().items();
-    res.json(chatList); 
-    console.log(chatList)
+    const threadF = await igClient.feed.directThread(thread);
+    threadF.cursor = undefined;
+    threadF.id = thread_id;
+    threadF.request().then((response) => {
+      res.json(response.thread); 
+      return response.thread;     
+    }).catch((error) => {
+      console.error("Error:", error); 
+    });
   } catch (error) {
     console.error('Failed to fetch chat list:', error); 
-    res.status(500).json({ error: 'Failed to retrieve chat list' });
+    res.status(500).json({ error: 'Failed to retrieve chat list' }); 
   }
 });
-
-app.get('/chats/:chatId', async (req, res) => {
-  const { chatId } = req.params;
-
-  try {
-    const threadFeed = igClient.feed.directThread({ id: chatId }); 
-    const thread = await threadFeed.request(); 
-
-    res.json(thread);
-  } catch (error) {
-    console.error('Failed to fetch chat:', error); 
-    res.status(500).json({ error: 'Failed to retrieve chat' });
-  }
-});
-
-
-
-app.get('/chats/:chatId/older', async (req, res) => {
-  const { chatId } = req.params;
-
-  try {
-    let threadFeed = igClient.feed.directThread({ id: chatId }); 
-    const messages = await threadFeed.items();
-
-    res.json(messages);
-  } catch (error) {
-    console.error('Failed to fetch older messages:', error); 
-    res.status(500).json({ error: 'Failed to retrieve older messages' }); 
-}});
-
-
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
