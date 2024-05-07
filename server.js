@@ -101,6 +101,24 @@ app.get('/chats/:thread_id/new_messages', async (req, res) => {
   }
 });
 
+app.post('/chats/:thread_id/send_message', async (req, res) => {
+  const { thread_id } = req.params;
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Message text is required' });
+  }
+
+  try {
+    const directThread = igClient.entity.directThread(thread_id);
+    const response = await directThread.broadcastText(message);
+    res.status(200).json({ message: 'Message sent successfully', response });
+  } catch (error) {
+    console.error('Failed to send message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
 });
