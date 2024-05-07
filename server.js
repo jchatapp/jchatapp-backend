@@ -51,6 +51,31 @@ app.get('/chats/:thread_id', async (req, res) => {
   }
 });
 
+app.get('/chats/:thread_id/messages', async (req, res) => {
+  const { thread_id } = req.params;
+  const { cursor } = req.query;
+
+  if (!thread_id) {
+    return res.status(400).json({ error: 'Thread ID is required' });
+  }
+
+  try {
+    const thread = igClient.feed.directThread({ thread_id: thread_id });
+    thread.cursor = cursor;
+    const messages = await thread.items();
+    const moreAvailable = thread.isMoreAvailable();
+
+    res.json({
+      messages: messages,
+      cursor: thread.cursor, 
+      moreAvailable: moreAvailable 
+    });
+  } catch (error) {
+    console.error('Failed to fetch messages:', error);
+    res.status(500).json({ error: 'Failed to retrieve messages' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
 });
