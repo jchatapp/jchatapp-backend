@@ -2,8 +2,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { IgApiClient } = require('instagram-private-api');
-const igClient = new IgApiClient();
-
+const { writeFile, readFile } = require('fs/promises');
+let igClient = new IgApiClient();
+let user;
+let pass;
 const app = express();
 const port = 8000; 
 
@@ -14,23 +16,52 @@ app.get('/health', (req, res) => {
   res.status(200).send('Server is running'); 
 });
 
+async function login(username, password) {
+  igClient.state.generateDevice(username);
+  await igClient.simulate.preLoginFlow();
+  try {
+    const loggedInUser = await igClient.account.login(username, password);
+    return loggedInUser;
+  } catch (e) {
+    console.error('Login failed:', e);
+    throw e;
+  }
+}
+
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
+  user = username;
+  pass = password;
 
   try {
-    igClient.state.generateDevice(username); 
-    await igClient.simulate.preLoginFlow(); 
-    const userData = await igClient.account.login(username, password); 
+    const userData = await login(username, password);
     const chatList = await igClient.feed.directInbox().items();
+    const userInfo = await igClient.user.info(userData.pk);
     res.json({
       userData, 
       chatList, 
+      userInfo
     });
   } catch (error) {
     console.error('Login failed:', error); 
     res.status(400).json({ error: 'Invalid login credentials' }); 
   }
 });
+
+app.post('/relogin', async (req, res) => {
+  try {
+    const userData = await igClient.account.login(user, pass); 
+    const chatList = await igClient.feed.directInbox().items();
+    res.json({
+      userData, 
+      chatList, 
+    });
+  } catch (error) {
+    console.error('Re-login failed:', error); 
+    res.status(400).json({ error: 'Failed to re-login' }); 
+  }
+});
+
 
 app.get('/chats/:thread_id', async (req, res) => {
   const { thread_id } = req.params; 
@@ -62,13 +93,15 @@ app.get('/chats/:thread_id/messages', async (req, res) => {
   try {
     const thread = igClient.feed.directThread({ thread_id: thread_id });
     thread.cursor = cursor;
-    const messages = await thread.items();
-    const moreAvailable = thread.isMoreAvailable();
+    let messages = await thread.items();
+
+    if (!thread.isMoreAvailable()) {
+      messages = null
+    }
 
     res.json({
       messages: messages,
       cursor: thread.cursor, 
-      moreAvailable: moreAvailable 
     });
   } catch (error) {
     console.error('Failed to fetch messages:', error);
@@ -88,16 +121,33 @@ app.get('/chats/:thread_id/new_messages', async (req, res) => {
   try {
     const thread = igClient.feed.directThread({ thread_id: thread_id });
     const messages = await thread.items(); 
-    const moreAvailable = thread.isMoreAvailable();
     const filteredMessages = messages.filter(message => parseInt(message.timestamp, 10) > parseInt(last_timestamp, 10));
 
     res.json({
-      messages: filteredMessages,
-      moreAvailable: moreAvailable
+      messages: filteredMessages
     });
   } catch (error) {
-    console.error('Failed to fetch new messages:', error);
-    res.status(500).json({ error: 'Failed to retrieve messages' });
+    if (error.name === 'IgLoginRequiredError' || error.message.includes('401')) {
+      try {
+        console.log('Waiting 7 seconds before reinitializing igClient...');
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        igClient = new IgApiClient();
+        console.log('Done waiting');
+        await login(user, pass);
+        const thread = igClient.feed.directThread({ thread_id: thread_id });
+        const messages = await thread.items(); 
+        const filteredMessages = messages.filter(message => parseInt(message.timestamp, 10) > parseInt(last_timestamp, 10));
+
+        res.json({
+          messages: filteredMessages
+        });
+      } catch (reloginError) {
+        console.error('Re-login failed:', reloginError);
+        res.status(500).json({ error: 'Failed to retrieve messages after re-login' });
+      }
+    } else {
+      res.status(500).json({ error: 'Failed to retrieve messages' });
+    }
   }
 });
 
@@ -119,6 +169,84 @@ app.post('/chats/:thread_id/send_message', async (req, res) => {
   }
 });
 
+app.get('/chats', async (req, res) => {
+  try {
+    const chatList = await igClient.feed.directInbox().items();
+    res.json(chatList);
+  } catch (error) {
+    if (isCheckpointError(error)) {
+      try {
+        console.log('Handling checkpoint error...');
+        await startCheckpoint();
+        console.log('Checkpoint handled');
+      } catch (checkpointError) {
+        console.error('Failed to handle checkpoint error:', checkpointError);
+        return res.status(500).json({ error: 'Failed to handle checkpoint error' });
+      }
+    } else if (error.name === 'IgLoginRequiredError' || error.message.includes('401')) {
+      try {
+        console.log('Waiting 3 seconds before reinitializing igClient...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        igClient = new IgApiClient();
+        console.log('Done waiting');
+        await login(user, pass);
+        const chatList = await igClient.feed.directInbox().items();
+        return res.json(chatList); 
+      } catch (reloginError) {
+        if (isCheckpointError(reloginError)) {
+          try {
+            console.log('Handling checkpoint error...');
+            await startCheckpoint();
+            console.log('Checkpoint handled');
+          } catch (checkpointError) {
+            console.error('Failed to handle checkpoint error:', checkpointError);
+            return res.status(500).json({ error: 'Failed to handle checkpoint error' });
+          }
+        }
+        console.error('Re-login failed:', reloginError);
+        return res.status(500).json({ error: 'Failed to retrieve messages after re-login' });
+      }
+    } else {
+      console.error('Failed to fetch chat list:', error);
+      return res.status(500).json({ error: 'Failed to fetch chat list' });
+    }
+  }
+});
+
+app.post('/chats/:thread_id/seen', async (req, res) => {
+  const { thread_id } = req.params;
+  const { item_id } = req.body;
+
+  if (!thread_id || !item_id) {
+    return res.status(400).json({ error: 'Thread ID and item ID are required' });
+  }
+
+  try {
+    const directThread = igClient.entity.directThread(thread_id);
+    await directThread.markItemSeen(item_id);
+    res.status(200).json({ message: 'Message marked as seen' });
+  } catch (error) {
+    console.error('Failed to mark message as seen:', error);
+    res.status(500).json({ error: 'Failed to mark message as seen' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
 });
+
+function isCheckpointError(error) {
+  return (error instanceof IgCheckpointError);
+}
+
+function isTwoFactorError(error) {
+  return (error instanceof IgLoginTwoFactorRequiredError);
+}
+
+async function startCheckpoint() {
+  return new Promise((resolve, reject) => {
+    igClient.challenge.auto(true).then(() => {
+      resolve(igClient.challenge);
+    }).catch(reject);
+  });
+}
