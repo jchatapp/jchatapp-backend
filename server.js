@@ -231,6 +231,18 @@ app.post('/chats/:thread_id/seen', async (req, res) => {
   }
 });
 
+app.post('/logout', async (req, res) => {
+  try {
+    igClient.account.logout()
+    res.status(200).json({ message: 'Logged out' });
+    igClient = new IgApiClient();
+  } catch (error) {
+    console.error('Failed to logout:', error);
+    res.status(500).json({ error: 'Failed to mark message as seen' });
+  }
+});
+
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
 });
