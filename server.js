@@ -12,9 +12,9 @@ const port = 8000;
 app.use(bodyParser.json()); 
 app.use(cors()); 
 
-app.get('/health', (req, res) => {
-  res.status(200).send('Server is running'); 
-});
+app.get("/", (req, res) => {
+  res.send("server is running");
+})
 
 async function login(username, password) {
   igClient.state.generateDevice(username);
