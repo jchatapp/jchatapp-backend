@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { IgApiClient } = require('instagram-private-api');
+const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const { writeFile, readFile } = require('fs/promises');
 let igClient = new IgApiClient();
 let user;
@@ -62,7 +62,6 @@ app.post('/relogin', async (req, res) => {
   }
 });
 
-
 app.get('/chats/:thread_id', async (req, res) => {
   const { thread_id } = req.params; 
   const thread = igClient.entity.directThread();
@@ -108,7 +107,6 @@ app.get('/chats/:thread_id/messages', async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve messages' });
   }
 });
-
 
 app.get('/chats/:thread_id/new_messages', async (req, res) => {
   const { thread_id } = req.params;
@@ -214,6 +212,7 @@ app.get('/chats', async (req, res) => {
 });
 
 app.post('/chats/:thread_id/seen', async (req, res) => {
+  console.log("here")
   const { thread_id } = req.params;
   const { item_id } = req.body;
 
@@ -238,10 +237,36 @@ app.post('/logout', async (req, res) => {
     igClient = new IgApiClient();
   } catch (error) {
     console.error('Failed to logout:', error);
-    res.status(500).json({ error: 'Failed to mark message as seen' });
+    res.status(500).json({ error: 'Failed to logout:' });
   }
 });
 
+app.get('/searchUser', async (req, res) => {
+  const { username } = req.query;
+  try {
+    const user = await igClient.user.searchExact(username);
+    res.status(200).json(user);
+  } catch (error) {
+    if (error.name === 'IgExactUserNotFoundError') {
+      res.status(404).json({ error: 'No user found' });
+    } else if (error.name === 'IgLoginRequiredError' || error.message.includes('401')) {
+      try {
+        console.log('Waiting 3 seconds before reinitializing igClient...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        igClient = new IgApiClient();
+        console.log('Done waiting');
+        await login(user, pass);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error });
+      }
+    } else {
+      console.error('Failed to get user:', error);
+      res.status(500).json({ error: 'Internal server error' });
+      
+    } 
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`); 
