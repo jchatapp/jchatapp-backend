@@ -51,7 +51,7 @@ app.post('/login', async (req, res) => {
     if (isCheckpointError(error)) {
       try {
         console.log('Handling checkpoint error...');
-        await ig.challenge.auto(true);
+        await igClient.challenge.auto(true);
         console.log('Checkpoint handled');
       } catch (checkpointError) {
         console.error('Failed to handle checkpoint error:', checkpointError);
