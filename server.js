@@ -299,3 +299,11 @@ app.get('/searchUser', async (req, res) => {
     } 
   }
 });
+
+function isCheckpointError(error) {
+  return (error instanceof IgCheckpointError);
+}
+
+function isTwoFactorError(error) {
+  return (error instanceof IgLoginTwoFactorRequiredError);
+}
