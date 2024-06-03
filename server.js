@@ -12,6 +12,10 @@ const port = 8000;
 app.use(bodyParser.json()); 
 app.use(cors()); 
 
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`); 
+});
+
 app.get("/", (req, res) => {
   res.send("server is running");
 })
@@ -43,8 +47,24 @@ app.post('/login', async (req, res) => {
       userInfo
     });
   } catch (error) {
+    console.error(error)
+    if (isCheckpointError(error)) {
+      try {
+        console.log('Handling checkpoint error...');
+        await ig.challenge.auto(true);
+        console.log('Checkpoint handled');
+      } catch (checkpointError) {
+        console.error('Failed to handle checkpoint error:', checkpointError);
+        return res.status(500).json({ error: 'Failed to handle checkpoint error' });
+      }
+    }
     console.error('Login failed:', error); 
-    res.status(400).json({ error: 'Invalid login credentials' }); 
+    if (error.name === "IgCheckpointError") {
+      res.status(400).json({ error: 'Challenge Required' }); 
+    }
+    else {
+      res.status(400).json({ error: 'Invalid login credentials' }); 
+    }
   }
 });
 
@@ -175,7 +195,7 @@ app.get('/chats', async (req, res) => {
     if (isCheckpointError(error)) {
       try {
         console.log('Handling checkpoint error...');
-        await startCheckpoint();
+        await ig.challenge.auto(true);
         console.log('Checkpoint handled');
       } catch (checkpointError) {
         console.error('Failed to handle checkpoint error:', checkpointError);
@@ -212,7 +232,6 @@ app.get('/chats', async (req, res) => {
 });
 
 app.post('/chats/:thread_id/seen', async (req, res) => {
-  console.log("here")
   const { thread_id } = req.params;
   const { item_id } = req.body;
 
@@ -241,6 +260,19 @@ app.post('/logout', async (req, res) => {
   }
 });
 
+app.post("/createchat", async (req, res) => {
+  const { users, message } = req.body; 
+  const userPKs = users.map(user => user.pk); 
+  try {
+    const directThread = igClient.entity.directThread(userPKs)
+    directThread.broadcastText(message)
+    await igClient.feed.directInbox().items();
+    res.status(200).json({ thread: directThread });
+  } catch (error) {
+    console.error(error)
+  }
+})
+
 app.get('/searchUser', async (req, res) => {
   const { username } = req.query;
   try {
@@ -267,23 +299,3 @@ app.get('/searchUser', async (req, res) => {
     } 
   }
 });
-
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`); 
-});
-
-function isCheckpointError(error) {
-  return (error instanceof IgCheckpointError);
-}
-
-function isTwoFactorError(error) {
-  return (error instanceof IgLoginTwoFactorRequiredError);
-}
-
-async function startCheckpoint() {
-  return new Promise((resolve, reject) => {
-    igClient.challenge.auto(true).then(() => {
-      resolve(igClient.challenge);
-    }).catch(reject);
-  });
-}
