@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const inquirer = import('inquirer');
 const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const { writeFile, readFile } = require('fs/promises');
 let igClient = new IgApiClient();
@@ -20,6 +21,8 @@ app.get("/", (req, res) => {
   res.send("server is running");
 })
 
+
+
 async function login(username, password) {
   igClient.state.generateDevice(username);
   await igClient.simulate.preLoginFlow();
@@ -31,6 +34,31 @@ async function login(username, password) {
     throw e;
   }
 }
+
+async function handleTwoFactorAuth(ig, username, twoFactorInfo) {
+  const { two_factor_identifier } = twoFactorInfo;
+  const verificationMethod = twoFactorInfo.totp_two_factor_on ? '0' : '1'; // '0' for TOTP, '1' for SMS
+  
+  try {
+    const { code } = await inquirer.prompt([{
+      type: 'input',
+      name: 'code',
+      message: `Enter the 2FA code received via ${verificationMethod === '1' ? 'SMS' : 'TOTP'}:`
+    }]);
+
+    return await ig.account.twoFactorLogin({
+      username,
+      verificationCode: code,
+      twoFactorIdentifier: two_factor_identifier,
+      verificationMethod,
+      trustThisDevice: '1',
+    });
+  } catch (error) {
+    console.error('Failed to complete two-factor authentication:', error);
+    throw error;
+  }
+}
+
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -50,14 +78,22 @@ app.post('/login', async (req, res) => {
     console.error(error)
     if (isCheckpointError(error)) {
       try {
-        console.log('Handling checkpoint error...');
         await igClient.challenge.auto(true);
-        console.log('Checkpoint handled');
       } catch (checkpointError) {
         console.error('Failed to handle checkpoint error:', checkpointError);
         return res.status(500).json({ error: 'Failed to handle checkpoint error' });
       }
     }
+    if (isTwoFactorError(error)) {
+        const userData = await handleTwoFactorAuth(ig, username, error.response.body.two_factor_info);
+        const chatList = await ig.feed.directInbox().items();
+        const userInfo = await ig.user.info(userData.pk);
+        res.json({
+          userData, 
+          chatList, 
+          userInfo
+        });
+      }
     console.error('Login failed:', error); 
     if (error.name === "IgCheckpointError") {
       res.status(400).json({ error: 'Challenge Required' }); 
