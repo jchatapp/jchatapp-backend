@@ -4,6 +4,7 @@ const cors = require('cors');
 const inquirer = import('inquirer');
 const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const { writeFile, readFile } = require('fs/promises');
+const { threadId } = require('worker_threads');
 let igClient = new IgApiClient();
 let user;
 let pass;
@@ -333,6 +334,18 @@ app.get('/searchUser', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
       
     } 
+  }
+});
+
+app.post("/delete", async (req, res) => {
+  const { thread_id } = req.query;
+  try {
+    const thread = igClient.entity.directThread(thread_id);
+    await thread.hide();
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('Failed to delete chat:', error);
+    res.status(500).json({ error: 'Could not delete chat', details: error.message });
   }
 });
 
