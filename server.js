@@ -4,7 +4,7 @@ const cors = require('cors');
 const inquirer = import('inquirer');
 const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const { writeFile, readFile } = require('fs/promises');
-const { threadId } = require('worker_threads');
+const host = '0.0.0.0'; 
 let igClient = new IgApiClient();
 let user;
 let pass;
@@ -15,14 +15,12 @@ app.use(bodyParser.json());
 app.use(cors()); 
 
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`); 
+  console.log(`Server running on http://${host}:${port}`);
 });
 
 app.get("/", (req, res) => {
   res.send("server is running");
 })
-
-
 
 async function login(username, password) {
   igClient.state.generateDevice(username);
@@ -38,7 +36,7 @@ async function login(username, password) {
 
 async function handleTwoFactorAuth(ig, username, twoFactorInfo) {
   const { two_factor_identifier } = twoFactorInfo;
-  const verificationMethod = twoFactorInfo.totp_two_factor_on ? '0' : '1'; // '0' for TOTP, '1' for SMS
+  const verificationMethod = twoFactorInfo.totp_two_factor_on ? '0' : '1';
   
   try {
     const { code } = await inquirer.prompt([{
@@ -47,7 +45,7 @@ async function handleTwoFactorAuth(ig, username, twoFactorInfo) {
       message: `Enter the 2FA code received via ${verificationMethod === '1' ? 'SMS' : 'TOTP'}:`
     }]);
 
-    return await ig.account.twoFactorLogin({
+    return await igClient.account.twoFactorLogin({
       username,
       verificationCode: code,
       twoFactorIdentifier: two_factor_identifier,
@@ -59,7 +57,6 @@ async function handleTwoFactorAuth(ig, username, twoFactorInfo) {
     throw error;
   }
 }
-
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -79,7 +76,11 @@ app.post('/login', async (req, res) => {
     console.error(error)
     if (isCheckpointError(error)) {
       try {
-        await igClient.challenge.auto(true);
+        console.log('Waiting 3 seconds before reinitializing igClient...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        igClient = new IgApiClient();
+        console.log('Done waiting');
+        await login(user, pass);
       } catch (checkpointError) {
         console.error('Failed to handle checkpoint error:', checkpointError);
         return res.status(500).json({ error: 'Failed to handle checkpoint error' });
@@ -87,8 +88,8 @@ app.post('/login', async (req, res) => {
     }
     if (isTwoFactorError(error)) {
         const userData = await handleTwoFactorAuth(ig, username, error.response.body.two_factor_info);
-        const chatList = await ig.feed.directInbox().items();
-        const userInfo = await ig.user.info(userData.pk);
+        const chatList = await igClient.feed.directInbox().items();
+        const userInfo = await igClient.user.info(userData.pk);
         res.json({
           userData, 
           chatList, 
@@ -97,6 +98,14 @@ app.post('/login', async (req, res) => {
       }
     console.error('Login failed:', error); 
     if (error.name === "IgCheckpointError") {
+      try {
+        console.log('Handling checkpoint error...');
+        await startCheckpoint();
+        console.log('Checkpoint handled');
+      } catch (checkpointError) {
+        console.error('Failed to handle checkpoint error:', checkpointError);
+        return res.status(500).json({ error: 'Failed to handle checkpoint error' });
+      }
       res.status(400).json({ error: 'Challenge Required' }); 
     }
     else {
@@ -184,10 +193,8 @@ app.get('/chats/:thread_id/new_messages', async (req, res) => {
   } catch (error) {
     if (error.name === 'IgLoginRequiredError' || error.message.includes('401')) {
       try {
-        console.log('Waiting 7 seconds before reinitializing igClient...');
         await new Promise(resolve => setTimeout(resolve, 7000));
         igClient = new IgApiClient();
-        console.log('Done waiting');
         await login(user, pass);
         const thread = igClient.feed.directThread({ thread_id: thread_id });
         const messages = await thread.items(); 
@@ -219,6 +226,13 @@ app.post('/chats/:thread_id/send_message', async (req, res) => {
     const response = await directThread.broadcastText(message);
     res.status(200).json({ message: 'Message sent successfully', response });
   } catch (error) {
+    if (error.name === 'IgLoginRequiredError') {
+      await new Promise(resolve => setTimeout(resolve, 7000));
+        igClient = new IgApiClient();
+        await login(user, pass);
+        const directThread = igClient.entity.directThread(thread_id);
+        const response = await directThread.broadcastText(message);
+    }
     console.error('Failed to send message:', error);
     res.status(500).json({ error: 'Failed to send message' });
   }
@@ -232,7 +246,7 @@ app.get('/chats', async (req, res) => {
     if (isCheckpointError(error)) {
       try {
         console.log('Handling checkpoint error...');
-        await ig.challenge.auto(true);
+        await igClient.challenge.auto(true);
         console.log('Checkpoint handled');
       } catch (checkpointError) {
         console.error('Failed to handle checkpoint error:', checkpointError);
@@ -348,6 +362,14 @@ app.post("/delete", async (req, res) => {
     res.status(500).json({ error: 'Could not delete chat', details: error.message });
   }
 });
+
+function startCheckpoint() {
+  return new Promise((resolve) => {
+    igClient.challenge.auto(true).then(() => {
+      resolve(igClient.challenge);
+    });
+  });
+}
 
 function isCheckpointError(error) {
   return (error instanceof IgCheckpointError);
