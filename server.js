@@ -4,10 +4,12 @@ const cors = require('cors');
 const inquirer = import('inquirer');
 const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const { writeFile, readFile } = require('fs/promises');
+const { log } = require('console');
 const host = '0.0.0.0'; 
 let igClient = new IgApiClient();
 let user;
 let pass;
+let userpk;
 const app = express();
 const port = 8000; 
 
@@ -67,6 +69,7 @@ app.post('/login', async (req, res) => {
     const userData = await login(username, password);
     const chatList = await igClient.feed.directInbox().items();
     const userInfo = await igClient.user.info(userData.pk);
+    userpk = userData.pk
     res.json({
       userData, 
       chatList, 
@@ -370,6 +373,12 @@ function startCheckpoint() {
     });
   });
 }
+
+app.get('/getFeed', async (req, res) => {
+  const followersFeed = igClient.feed.user(userpk)
+  const posts = await followersFeed.items();
+  res.status(200).json({ posts });
+})
 
 function isCheckpointError(error) {
   return (error instanceof IgCheckpointError);
