@@ -366,6 +366,18 @@ app.post("/delete", async (req, res) => {
   }
 });
 
+app.post("/chatChatName", async (req, res) => {
+  const { threadId, newName } = req.body;
+  try {
+    const thread = igClient.entity.directThread(threadId);
+    await thread.updateTitle(newName);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('Failed to change name of chat:', error);
+    res.status(500).json({ error: 'Could not change name of chat', details: error.message });
+  }
+});
+
 function startCheckpoint() {
   return new Promise((resolve) => {
     igClient.challenge.auto(true).then(() => {
