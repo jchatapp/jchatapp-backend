@@ -2,16 +2,28 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const inquirer = import('inquirer');
+const { MongoClient, ServerApiVersion } = require('mongodb');
 const { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
-const { writeFile, readFile } = require('fs/promises');
-const { log } = require('console');
 const host = '0.0.0.0'; 
 let igClient = new IgApiClient();
 let user;
 let pass;
 let userpk;
+const { run, insertUser, getUserList} = require('./db_handler');
 const app = express();
 const port = 8000; 
+require('dotenv').config();
+const uri = process.env.MONGO_KEY;
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
+
+run(client)
 
 app.use(bodyParser.json()); 
 app.use(cors()); 
@@ -70,10 +82,12 @@ app.post('/login', async (req, res) => {
     const chatList = await igClient.feed.directInbox().items();
     const userInfo = await igClient.user.info(userData.pk);
     userpk = userData.pk
+    const userList = await getUserList(userpk, client)
     res.json({
       userData, 
       chatList, 
-      userInfo
+      userInfo,
+      userList
     });
   } catch (error) {
     console.error(error)
@@ -96,7 +110,8 @@ app.post('/login', async (req, res) => {
         res.json({
           userData, 
           chatList, 
-          userInfo
+          userInfo,
+          usersList
         });
       }
     console.error('Login failed:', error); 
@@ -366,7 +381,7 @@ app.post("/delete", async (req, res) => {
   }
 });
 
-app.post("/chatChatName", async (req, res) => {
+app.post("/changeChatName", async (req, res) => {
   const { threadId, newName } = req.body;
   try {
     const thread = igClient.entity.directThread(threadId);
@@ -385,6 +400,11 @@ function startCheckpoint() {
     });
   });
 }
+
+app.post('/addusertolist', async (req, res) => {
+  const {userId, usersList} = req.body
+  insertUser(userId, usersList, client)   
+})
 
 app.get('/getFeed', async (req, res) => {
   const followersFeed = igClient.feed.user(userpk)
