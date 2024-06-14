@@ -9,7 +9,7 @@ let igClient = new IgApiClient();
 let user;
 let pass;
 let userpk;
-const { run, insertUser, getUserList} = require('./db_handler');
+const { run, insertUser, getUserList, deleteUser} = require('./db_handler');
 const app = express();
 const port = 8000; 
 require('dotenv').config();
@@ -404,6 +404,12 @@ function startCheckpoint() {
 app.post('/addusertolist', async (req, res) => {
   const {userId, usersList} = req.body
   const reponse = await insertUser(userId, usersList, client)  
+  res.status(200).json({ reponse }); 
+})
+
+app.post('/deleteuserfromlist', async (req, res) => {
+  const {userId, del_user_pk} = req.body
+  const reponse = await deleteUser(userId, del_user_pk, client)  
   res.status(200).json({ reponse }); 
 })
 

@@ -13,16 +13,20 @@ async function run(client) {
 
 async function insertUser(userId, newUser, client) {
     try {
+        const newUserPk = newUser[0].pk_id; 
         const updateResult = await client.db('JChat').collection('users').updateOne(
-            { _id: userId.toString() }, 
+            {
+                _id: userId.toString(), 
+                "usersList.pk_id": { $ne: newUserPk }  
+            }, 
             { $push: { usersList: newUser[0] } },
-            { upsert: true }   
+            { upsert: true }
         );
         
         if (updateResult.matchedCount === 0) {
-            return null
+            return null; 
         } else if (updateResult.modifiedCount === 1) {
-            return updateResult
+            return updateResult;  
         }
     } catch (error) {
         console.error("Error updating user:", error);
@@ -43,4 +47,22 @@ async function getUserList(userId, client) {
     }
 }
 
-module.exports = { run, insertUser, getUserList };
+async function deleteUser(userId, pk, client) {
+    console.log(userId, pk)
+    try {
+      const result = await  client.db('JChat').collection('users').updateOne(
+        { _id: userId.toString() },
+        { $pull: { usersList: { pk: pk } } }
+      );
+  
+      if (result.matchedCount === 0) {
+            return null; 
+        } else if (result.modifiedCount === 1) {
+            return result;  
+        }
+    } catch (e) {
+      console.error("An error occurred while deleting the user:", e);
+    } 
+}
+
+module.exports = { run, insertUser, getUserList, deleteUser };
