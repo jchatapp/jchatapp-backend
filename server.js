@@ -403,8 +403,15 @@ function startCheckpoint() {
 
 app.post('/addusertolist', async (req, res) => {
   const {userId, usersList} = req.body
-  insertUser(userId, usersList, client)   
+  const reponse = await insertUser(userId, usersList, client)  
+  res.status(200).json({ reponse }); 
 })
+
+app.post('/getUserList', async (req, res) => {
+  const { userId } = req.body;
+  const response = await getUserList(userId, client);
+  res.status(200).json({ response });
+});
 
 app.get('/getFeed', async (req, res) => {
   const followersFeed = igClient.feed.user(userpk)

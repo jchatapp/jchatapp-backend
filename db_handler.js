@@ -12,11 +12,11 @@ async function run(client) {
 };  
 
 async function insertUser(userId, newUser, client) {
-    console.log(newUser)
     try {
         const updateResult = await client.db('JChat').collection('users').updateOne(
             { _id: userId.toString() }, 
-            { $push: { usersList: newUser } }  
+            { $push: { usersList: newUser[0] } },
+            { upsert: true }   
         );
         
         if (updateResult.matchedCount === 0) {
