@@ -7,6 +7,7 @@
     "instagram-private-api": "^1.46.1",
     "mongodb": "^6.7.0",
     "mongoose": "^8.4.1",
+    "ngrok": "^5.0.0-beta.2",
     "node": "^18.20.2",
     "utils": "^0.3.1"
   },
