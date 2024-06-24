@@ -1,6 +1,10 @@
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
-let mongodb_client;
+function getCurrentTimestampMicro() {
+    const date = new Date();
+    const timestampMicro = date.getTime() * 1000;
+    return timestampMicro.toString();
+  }
 
 async function run(client) {
     try {
@@ -11,27 +15,36 @@ async function run(client) {
     }
 };  
 
-async function insertUser(userId, newUser, client) {
+async function insertUser(userId, usersList, client) {
     try {
-        const newUserPk = newUser[0].pk_id; 
+      const results = [];
+      for (const user of usersList) {
+        const newUserPk = user.pk_id;
+        const timestamp = getCurrentTimestampMicro();
+  
+        const userWithTimestamp = {
+          ...user,
+          timestamp: timestamp, 
+          seen: false
+        };
+  
         const updateResult = await client.db('JChat').collection('users').updateOne(
-            {
-                _id: userId.toString(), 
-                "usersList.pk_id": { $ne: newUserPk }  
-            }, 
-            { $push: { usersList: newUser[0] } },
-            { upsert: true }
+          {
+            _id: userId.toString(),
+            "usersList.pk_id": { $ne: newUserPk }
+          },
+          { $push: { usersList: userWithTimestamp } },
+          { upsert: true }
         );
-        
-        if (updateResult.matchedCount === 0) {
-            return null; 
-        } else if (updateResult.modifiedCount === 1) {
-            return updateResult;  
-        }
+  
+        results.push(updateResult);
+      }
+      return results;
     } catch (error) {
-        console.error("Error updating user:", error);
+      console.error("Error updating user:", error);
+      throw error;  
     }
-}
+  }
 
 async function getUserList(userId, client) {
     try {
@@ -48,7 +61,6 @@ async function getUserList(userId, client) {
 }
 
 async function deleteUser(userId, pk, client) {
-    console.log(userId, pk)
     try {
       const result = await  client.db('JChat').collection('users').updateOne(
         { _id: userId.toString() },

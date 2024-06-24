@@ -83,6 +83,8 @@ app.post('/login', async (req, res) => {
     const userInfo = await igClient.user.info(userData.pk);
     userpk = userData.pk
     const userList = await getUserList(userpk, client)
+    const userListData = await getUserListData(userList)
+    console.log(userListData)
     res.json({
       userData, 
       chatList, 
@@ -424,6 +426,16 @@ app.get('/getFeed', async (req, res) => {
   const posts = await followersFeed.items();
   res.status(200).json({ posts });
 })
+
+async function getUserListData(userList) {
+  let result = []
+  for (const newuser of userList.usersList) {
+    const followersFeed = igClient.feed.user(newuser.pk)
+    const posts = await followersFeed.items(); 
+    result.push(posts)
+  }
+  return result
+}
 
 function isCheckpointError(error) {
   return (error instanceof IgCheckpointError);
