@@ -21,11 +21,12 @@ async function insertUser(userId, usersList, client) {
       for (const user of usersList) {
         const newUserPk = user.pk_id;
         const timestamp = getCurrentTimestampMicro();
+        const lastSeenTimestamp = getCurrentTimestampMicro();
   
         const userWithTimestamp = {
           ...user,
           timestamp: timestamp, 
-          seen: false
+          lastSeenTimestamp: lastSeenTimestamp,
         };
   
         const updateResult = await client.db('JChat').collection('users').updateOne(
@@ -62,7 +63,7 @@ async function getUserList(userId, client) {
 
 async function deleteUser(userId, pk, client) {
     try {
-      const result = await  client.db('JChat').collection('users').updateOne(
+      const result = await client.db('JChat').collection('users').updateOne(
         { _id: userId.toString() },
         { $pull: { usersList: { pk: pk } } }
       );
@@ -77,4 +78,34 @@ async function deleteUser(userId, pk, client) {
     } 
 }
 
-module.exports = { run, insertUser, getUserList, deleteUser };
+async function setLastSeenTimestamp(userId, pk, lastSeenTimestamp, client) {
+  try {
+    const result = await client.db('JChat').collection('users').updateOne(
+      { _id: userId.toString(), 'usersList.pk': pk },
+      { 
+        $set: {
+          'usersList.$.lastSeenTimestamp': lastSeenTimestamp,
+        }
+      }
+    );
+  } catch (error) {
+    console.error("Error updating document: ", error);
+  }
+}
+
+async function updateTimestamp(userId, pk, lastSeenTimestamp, client) {
+  try {
+    const result = await client.db('JChat').collection('users').updateOne(
+      { _id: userId.toString(), 'usersList.pk': pk },
+      { 
+        $set: {
+          'usersList.$.timestamp': lastSeenTimestamp,
+        }
+      }
+    );
+  } catch (error) {
+    console.error("Error updating document: ", error);
+  }
+}
+
+module.exports = { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp, updateTimestamp };

@@ -9,7 +9,7 @@ let igClient = new IgApiClient();
 let user;
 let pass;
 let userpk;
-const { run, insertUser, getUserList, deleteUser} = require('./db_handler');
+const { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp} = require('./db_handler');
 const app = express();
 const port = 8000; 
 require('dotenv').config();
@@ -83,13 +83,13 @@ app.post('/login', async (req, res) => {
     const userInfo = await igClient.user.info(userData.pk);
     userpk = userData.pk
     const userList = await getUserList(userpk, client)
-    const userListData = await getUserListData(userList)
-    console.log(userListData)
+    const userPostList = await getUserListData(userList)
     res.json({
       userData, 
       chatList, 
       userInfo,
-      userList
+      userList,
+      userPostList
     });
   } catch (error) {
     console.error(error)
@@ -366,7 +366,6 @@ app.get('/searchUser', async (req, res) => {
     } else {
       console.error('Failed to get user:', error);
       res.status(500).json({ error: 'Internal server error' });
-      
     } 
   }
 });
@@ -427,14 +426,37 @@ app.get('/getFeed', async (req, res) => {
   res.status(200).json({ posts });
 })
 
+app.post('/setTimestampandSeen', async (req, res) => {
+  const {userpk, itempk, lastSeenTimestamp} = req.body;
+  const response = await setLastSeenTimestamp(userpk, itempk, lastSeenTimestamp, client)
+  res.status(200).json({ response });
+})
+
 async function getUserListData(userList) {
-  let result = []
-  for (const newuser of userList.usersList) {
-    const followersFeed = igClient.feed.user(newuser.pk)
-    const posts = await followersFeed.items(); 
-    result.push(posts)
+  if (!userList) {
+    return { recentPosts: [], unseenPosts: [] };
   }
-  return result
+
+  let recentPosts = [];
+  let unseenPosts = [];
+
+  for (const user of userList.usersList) {
+    const followersFeed = igClient.feed.user(user.pk);
+    const posts = await followersFeed.items();
+
+    for (let post of posts) {
+      const postTimestamp = parseInt(post.taken_at);
+      if (greaterTimestamp(parseInt(user.timestamp), postTimestamp)) {
+        recentPosts.push(post);
+      }
+      if (greaterTimestamp(parseInt(user.lastSeenTimestamp), postTimestamp)) {
+        unseenPosts.push(post);
+      }
+    }
+  }
+
+  console.log(recentPosts.length, unseenPosts.length)
+  return { recentPosts, unseenPosts };
 }
 
 function isCheckpointError(error) {
@@ -443,4 +465,14 @@ function isCheckpointError(error) {
 
 function isTwoFactorError(error) {
   return (error instanceof IgLoginTwoFactorRequiredError);
+}
+
+// Return true if posttimestamp > dbtimestamp (ie add to list)
+function greaterTimestamp(dbTimestamp, postTimestamp) {
+  if (dbTimestamp > 9999999999) {
+    dbTimestamp = Math.floor(dbTimestamp / 1000);
+  }
+  const date1 = new Date(postTimestamp * 1000); 
+  const date2 = new Date(dbTimestamp); 
+  return date1 > date2;
 }
