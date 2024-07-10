@@ -434,29 +434,33 @@ app.post('/setTimestampandSeen', async (req, res) => {
 
 async function getUserListData(userList) {
   if (!userList) {
-    return { recentPosts: [], unseenPosts: [] };
+    return {};
   }
 
-  let recentPosts = [];
-  let unseenPosts = [];
+  let userPostsMap = {};
 
   for (const user of userList.usersList) {
     const followersFeed = igClient.feed.user(user.pk);
     const posts = await followersFeed.items();
 
+    let userNewPosts = [];
+    let userOldPosts = [];
+
     for (let post of posts) {
       const postTimestamp = parseInt(post.taken_at);
-      if (greaterTimestamp(parseInt(user.timestamp), postTimestamp)) {
-        recentPosts.push(post);
-      }
-      if (greaterTimestamp(parseInt(user.lastSeenTimestamp), postTimestamp)) {
-        unseenPosts.push(post);
+      if (greaterTimestamp(parseInt(user.cursor), postTimestamp)) {
+        userNewPosts.push(post);
+      } else {
+        userOldPosts.push(post);
       }
     }
-  }
 
-  console.log(recentPosts.length, unseenPosts.length)
-  return { recentPosts, unseenPosts };
+    userPostsMap[user.pk] = {
+      newPosts: userNewPosts,
+      oldPosts: userOldPosts
+    };
+  }
+  return userPostsMap;
 }
 
 function isCheckpointError(error) {

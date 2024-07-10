@@ -20,13 +20,11 @@ async function insertUser(userId, usersList, client) {
       const results = [];
       for (const user of usersList) {
         const newUserPk = user.pk_id;
-        const timestamp = getCurrentTimestampMicro();
-        const lastSeenTimestamp = getCurrentTimestampMicro();
+        const cursor = getCurrentTimestampMicro();
   
-        const userWithTimestamp = {
+        const userWithCursor = {
           ...user,
-          timestamp: timestamp, 
-          lastSeenTimestamp: lastSeenTimestamp,
+          cursor: cursor,
         };
   
         const updateResult = await client.db('JChat').collection('users').updateOne(
@@ -34,7 +32,7 @@ async function insertUser(userId, usersList, client) {
             _id: userId.toString(),
             "usersList.pk_id": { $ne: newUserPk }
           },
-          { $push: { usersList: userWithTimestamp } },
+          { $push: { usersList: userWithCursor } },
           { upsert: true }
         );
   
@@ -84,7 +82,7 @@ async function setLastSeenTimestamp(userId, pk, lastSeenTimestamp, client) {
       { _id: userId.toString(), 'usersList.pk': pk },
       { 
         $set: {
-          'usersList.$.lastSeenTimestamp': lastSeenTimestamp,
+          'usersList.$.cursor': lastSeenTimestamp,
         }
       }
     );
@@ -99,7 +97,7 @@ async function updateTimestamp(userId, pk, lastSeenTimestamp, client) {
       { _id: userId.toString(), 'usersList.pk': pk },
       { 
         $set: {
-          'usersList.$.timestamp': lastSeenTimestamp,
+          'usersList.$.cursor': lastSeenTimestamp,
         }
       }
     );
