@@ -25,7 +25,8 @@ async function insertUser(userId, usersList, client) {
         const userWithCursor = {
           ...user,
           cursor: cursor,
-        };
+          storyCursor: cursor,
+        }
   
         const updateResult = await client.db('JChat').collection('users').updateOne(
           {
@@ -43,7 +44,7 @@ async function insertUser(userId, usersList, client) {
       console.error("Error updating user:", error);
       throw error;  
     }
-  }
+  };
 
 async function getUserList(userId, client) {
     try {
@@ -77,6 +78,7 @@ async function deleteUser(userId, pk, client) {
 }
 
 async function setLastSeenTimestamp(userId, pk, lastSeenTimestamp, client) {
+  console.log('here')
   try {
     const result = await client.db('JChat').collection('users').updateOne(
       { _id: userId.toString(), 'usersList.pk': pk },
@@ -91,13 +93,13 @@ async function setLastSeenTimestamp(userId, pk, lastSeenTimestamp, client) {
   }
 }
 
-async function updateTimestamp(userId, pk, lastSeenTimestamp, client) {
+async function setStoryLastSeenTimestamp(userId, pk, lastSeenTimestamp, client) {
   try {
     const result = await client.db('JChat').collection('users').updateOne(
-      { _id: userId.toString(), 'usersList.pk': pk },
+      { _id: userId.toString(), 'usersList.pk': parseInt(pk) },
       { 
         $set: {
-          'usersList.$.cursor': lastSeenTimestamp,
+          'usersList.$.storyCursor': lastSeenTimestamp,
         }
       }
     );
@@ -106,4 +108,5 @@ async function updateTimestamp(userId, pk, lastSeenTimestamp, client) {
   }
 }
 
-module.exports = { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp, updateTimestamp };
+
+module.exports = { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp, setStoryLastSeenTimestamp };

@@ -9,7 +9,7 @@ let igClient = new IgApiClient();
 let user;
 let pass;
 let userpk;
-const { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp} = require('./db_handler');
+const { run, insertUser, getUserList, deleteUser, setLastSeenTimestamp, setStoryLastSeenTimestamp} = require('./db_handler');
 const app = express();
 const port = 8000; 
 require('dotenv').config();
@@ -28,7 +28,7 @@ run(client)
 app.use(bodyParser.json()); 
 app.use(cors()); 
 
-app.listen(port, () => {
+app.listen(port, host, () => {
   console.log(`Server running on http://${host}:${port}`);
 });
 
@@ -432,6 +432,12 @@ app.post('/setTimestampandSeen', async (req, res) => {
   res.status(200).json({ response });
 })
 
+app.post('/setStoryTimestamp', async (req, res) => {
+  const {userpk, stories, lastSeenTimestamp} = req.body;
+  const response = await setStoryLastSeenTimestamp(userpk, stories, lastSeenTimestamp, client)
+  res.status(200).json({ response }); 
+})
+
 async function getUserListData(userList) {
   if (!userList) {
     return {};
@@ -442,6 +448,9 @@ async function getUserListData(userList) {
   for (const user of userList.usersList) {
     const followersFeed = igClient.feed.user(user.pk);
     const posts = await followersFeed.items();
+
+    const storiesFeed = igClient.feed.reelsMedia({ userIds: [user.pk] });
+    const stories = await storiesFeed.items();
 
     let userNewPosts = [];
     let userOldPosts = [];
@@ -457,11 +466,13 @@ async function getUserListData(userList) {
 
     userPostsMap[user.pk] = {
       newPosts: userNewPosts,
-      oldPosts: userOldPosts
+      oldPosts: userOldPosts,
+      userStories: stories,
+      storyCursor: user.storyCursor
     };
-  }
+  };
   return userPostsMap;
-}
+};
 
 function isCheckpointError(error) {
   return (error instanceof IgCheckpointError);
